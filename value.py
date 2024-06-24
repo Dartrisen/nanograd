@@ -1,16 +1,22 @@
+from __future__ import annotations
+
+
 class Value:
-    def __init__(self, data, _children=()):
+    """Value class which stores a single scalar and it's gradient.
+
+    """
+    def __init__(self, data: int | float, _children: tuple = ()) -> None:
         self.data = data
         self._prev = set(_children)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Value(data={self.data})"
 
-    def __add__(self, other):
+    def __add__(self, other: Value) -> Value:
         out = Value(self.data + other.data, (self, other))
         return out
 
-    def __mul__(self, other):
+    def __mul__(self, other: Value) -> Value:
         out = Value(self.data * other.data, (self, other))
         return out
 
