@@ -1,4 +1,5 @@
 from __future__ import annotations
+from plot_graph import draw_dot
 
 
 class Value:
@@ -6,9 +7,11 @@ class Value:
 
     """
 
-    def __init__(self, data: int | float, _children: tuple = (), _op: str = "") -> None:
+    def __init__(self, data: int | float, _children: tuple = (), _op: str = "", label: str = "") -> None:
         self.data = data
         self._prev = set(_children)
+        self._op = _op
+        self.label = label
 
     def __repr__(self) -> str:
         return f"Value(data={self.data})"
@@ -23,9 +26,13 @@ class Value:
 
 
 if __name__ == '__main__':
-    a = Value(2.0)
-    b = Value(-3.0)
-    c = Value(10.0)
+    a = Value(2.0, label="a")
+    b = Value(-3.0, label="b")
+    c = Value(10.0, label="c")
 
-    d = a * b + c
-    print(d)
+    e = a * b
+    e.label = "e"
+    d = e + c
+    d.label = "d"
+    dot = draw_dot(d)
+    dot.render('graph', format="jpg", view=True)
