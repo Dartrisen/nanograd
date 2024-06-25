@@ -23,8 +23,8 @@ class Value:
         out = Value(self.data + other.data, (self, other), "+")
 
         def _backward():
-            self.grad = 1.0 * out.grad
-            other.grad = 1.0 * out.grad
+            self.grad += 1.0 * out.grad
+            other.grad += 1.0 * out.grad
         out._backward = _backward
         return out
 
@@ -32,8 +32,8 @@ class Value:
         out = Value(self.data * other.data, (self, other), "*")
 
         def _backward():
-            self.grad = other.data * out.grad
-            other.grad = self.data * out.grad
+            self.grad += other.data * out.grad
+            other.grad += self.data * out.grad
         out._backward = _backward
         return out
 
@@ -43,9 +43,24 @@ class Value:
         out = Value(t, (self, ), "tanh")
 
         def _backward():
-            self.grad = (1.0 - t**2) * out.grad
+            self.grad += (1.0 - t**2) * out.grad
         out._backward = _backward
         return out
+
+    def backward(self):
+        topo = []
+        visited = set()
+
+        def build_topo(v):
+            if v not in visited:
+                visited.add(v)
+                for child in v._prev:
+                    build_topo(child)
+                topo.append(v)
+        build_topo(self)
+        self.grad = 1.0
+        for node in reversed(topo):
+            node._backward()
 
 
 if __name__ == '__main__':
@@ -67,8 +82,6 @@ if __name__ == '__main__':
     n = x1w1x2w2 + b
     n.label = "n"
     o = n.tanh()
-    o.grad = 1.0
-    for item in [o, n, b, x1w1x2w2, x1w1, x2w2]:
-        item._backward()
+    o.backward()
     dot = draw_dot(o)
     dot.render("graph", format="jpg", view=True)
