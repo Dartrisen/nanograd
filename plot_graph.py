@@ -20,10 +20,11 @@ def draw_dot(root, format="svg", rankdir="LR"):
     dot = Digraph(format=format, graph_attr={"rankdir": rankdir})
 
     for n in nodes:
-        dot.node(name=str(id(n)), label="{ data %.4f | grad %.4f }" % (n.data, n.grad), shape="record")
+        uid = str(id(n))
+        dot.node(name=uid, label="{ %s | data %.4f | grad %.4f }" % (n.label, n.data, n.grad), shape="record")
         if n._op:
-            dot.node(name=str(id(n)) + n._op, label=n._op)
-            dot.edge(str(id(n)) + n._op, str(id(n)))
+            dot.node(name=uid + n._op, label=n._op)
+            dot.edge(uid + n._op, uid)
 
     for n1, n2 in edges:
         dot.edge(str(id(n1)), str(id(n2)) + n2._op)

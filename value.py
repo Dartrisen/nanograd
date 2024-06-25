@@ -68,6 +68,7 @@ if __name__ == '__main__':
     n.label = "n"
     o = n.tanh()
     o.grad = 1.0
-    o._backward()
+    for item in [o, n, b, x1w1x2w2, x1w1, x2w2]:
+        item._backward()
     dot = draw_dot(o)
     dot.render("graph", format="jpg", view=True)
