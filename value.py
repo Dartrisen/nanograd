@@ -20,6 +20,7 @@ class Value:
         return f"Value(data={self.data})"
 
     def __add__(self, other: Value) -> Value:
+        other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data + other.data, (self, other), "+")
 
         def _backward():
@@ -37,6 +38,9 @@ class Value:
         out._backward = _backward
         return out
 
+    def __rmul__(self, other):
+        return self * other
+
     def tanh(self):
         x = self.data
         t = (exp(2*x) - 1) / (exp(2*x) + 1)
@@ -44,6 +48,15 @@ class Value:
 
         def _backward():
             self.grad += (1.0 - t**2) * out.grad
+        out._backward = _backward
+        return out
+
+    def exp(self):
+        x = self.data
+        out = Value(exp(x), (self, ), "exp")
+
+        def _backward():
+            self.grad += out.data * out.grad
         out._backward = _backward
         return out
 
@@ -83,5 +96,6 @@ if __name__ == '__main__':
     n.label = "n"
     o = n.tanh()
     o.backward()
+    # render graph
     dot = draw_dot(o)
     dot.render("graph", format="jpg", view=True)
