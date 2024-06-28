@@ -1,6 +1,8 @@
 from __future__ import annotations
-from plot_graph import draw_dot
+
 from math import exp
+
+from plot_graph import draw_dot
 
 
 class Value:
@@ -93,9 +95,10 @@ class Value:
                     build_topo(child)
                 topo.append(v)
         build_topo(self)
+
         self.grad = 1.0
-        for node in reversed(topo):
-            node._backward()
+        for v in reversed(topo):
+            v._backward()
 
 
 if __name__ == '__main__':
