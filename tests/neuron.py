@@ -36,7 +36,7 @@ class TestNeuron(unittest.TestCase):
 
     def test_zero_grad(self):
         for param in self.neuron.parameters():
-            param.grad = 5  # Set some initial non-zero value for grad
+            param.grad = 5
 
         self.neuron.zero_grad()
 
