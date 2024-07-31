@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from nanograd.layer import Layer
 from nanograd.neuron import Neuron
@@ -16,6 +16,10 @@ class TestLayer(unittest.TestCase):
 
         with patch('nanograd.layer.Layer', autospec=True):
             self.mock_layer = Layer(self.inputs, self.outputs)
+
+            for neuron in self.mock_layer.neurons:
+                for param in neuron.parameters():
+                    param.grad = 5
 
     def test_initialization(self):
         length = len(self.mock_layer.neurons)
@@ -41,10 +45,6 @@ class TestLayer(unittest.TestCase):
                 self.assertIsInstance(param, Value, "Each parameter should be an instance of Value")
 
     def test_zero_grad(self):
-        for neuron in self.mock_layer.neurons:
-            for param in neuron.parameters():
-                param.grad = 5
-
         self.mock_layer.zero_grad()
 
         for neuron in self.mock_layer.neurons:
