@@ -21,74 +21,74 @@ class Value:
     def __repr__(self) -> str:
         return f"Value(data={self.data}, grad={self.grad})"
 
-    def __add__(self, other: Value) -> Value:
+    def __add__(self, other: int | float | Value) -> Value:
         other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data + other.data, (self, other), "+")
 
-        def _backward():
+        def _backward() -> None:
             self.grad += 1.0 * out.grad
             other.grad += 1.0 * out.grad
         out._backward = _backward
         return out
 
-    def __radd__(self, other):
+    def __radd__(self, other: Value) -> Value:
         return self.__add__(other)
 
-    def __mul__(self, other: Value) -> Value:
+    def __mul__(self, other: int | float | Value) -> Value:
         other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data * other.data, (self, other), "*")
 
-        def _backward():
+        def _backward() -> None:
             self.grad += other.data * out.grad
             other.grad += self.data * out.grad
         out._backward = _backward
         return out
 
-    def __pow__(self, other):
+    def __pow__(self, other: int | float) -> Value:
         assert isinstance(other, (int, float))
         out = Value(self.data**other, (self,), f"**{other}")
 
-        def _backward():
+        def _backward() -> None:
             self.grad += other * self.data**(other-1) * out.grad
         out._backward = _backward
         return out
 
-    def __rmul__(self, other):
+    def __rmul__(self, other: int | float | Value) -> Value:
         return self * other
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: int | float | Value) -> Value:
         return self * other**(-1)
 
-    def __neg__(self):
+    def __neg__(self) -> Value:
         return self * (-1)
 
-    def __sub__(self, other):
+    def __sub__(self, other: int | float | Value) -> Value:
         return self + (-other)
 
-    def tanh(self):
+    def tanh(self) -> Value:
         x = self.data
         t = (exp(2*x) - 1) / (exp(2*x) + 1)
-        out = Value(t, (self,), "tanh")
+        out = Value(t, (self, ), "tanh")
 
-        def _backward():
+        def _backward() -> None:
             self.grad += (1.0 - t**2) * out.grad
         out._backward = _backward
         return out
 
-    def exp(self):
+    def exp(self) -> Value:
         x = self.data
         out = Value(exp(x), (self,), "exp")
 
-        def _backward():
+        def _backward() -> None:
             self.grad += out.data * out.grad
         out._backward = _backward
         return out
 
-    def backward(self):
+    def backward(self) -> None:
         topo = []
         visited = set()
 
-        def build_topo(v):
+        def build_topo(v: Value) -> None:
             if v not in visited:
                 visited.add(v)
                 for child in v._prev:
