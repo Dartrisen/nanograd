@@ -14,5 +14,5 @@ class Neuron(Module):
         out = act.tanh()
         return out
 
-    def parameters(self):
+    def parameters(self) -> list[Value]:
         return self.w + [self.b]
