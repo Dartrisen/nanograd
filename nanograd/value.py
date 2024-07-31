@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from math import exp
 
-from plot_graph import draw_dot
+from .plot_graph import draw_dot
 
 
 class Value:
