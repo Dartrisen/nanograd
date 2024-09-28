@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from math import exp
 
-from .plot_graph import draw_dot
+from nanograd.plot_graph import draw_dot
+from nanograd.topo_sort import topo_sort_iterative
 
 
 class Value:
@@ -85,17 +86,9 @@ class Value:
         return out
 
     def backward(self) -> None:
-        topo = []
-        visited = set()
+        topo = topo_sort_iterative(self)
 
-        def build_topo(v: Value) -> None:
-            if v not in visited:
-                visited.add(v)
-                for child in v._prev:
-                    build_topo(child)
-                topo.append(v)
-        build_topo(self)
-
+        # Backpropagation step
         self.grad = 1.0
         for v in reversed(topo):
             v._backward()
