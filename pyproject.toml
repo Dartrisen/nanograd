@@ -1,0 +1,9 @@
+[project]
+name = "nanograd"
+version = "0.1.0"
+description = "A small neural network library built from scratch in Python."
+requires-python = ">=3.12"
+dependencies = [
+    "graphviz~=0.21",
+    "numpy>=2.5.0",
+]
