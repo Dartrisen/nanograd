@@ -1,9 +1,15 @@
-# topological graph sort
+from __future__ import annotations
 
-def topo_sort_iterative(start):
-    topo = []
-    visited = set()
-    stack = [start]
+from typing import Protocol, Iterable
+
+class GraphNode(Protocol):
+    _prev: Iterable["GraphNode"]
+
+def topo_sort_iterative(root: GraphNode) -> list[GraphNode]:
+    """Returns a topologically sorted list of nodes starting from the root."""
+    topo: list[GraphNode] = []
+    visited: set[GraphNode] = set()
+    stack: list[GraphNode] = [root]
 
     while stack:
         node = stack.pop()
