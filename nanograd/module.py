@@ -1,12 +1,21 @@
-from abc import ABC
+from typing import List, Union
+import numpy as np
+from nanograd.value import Value
+from nanograd.tensor import Tensor
 
+Parameter = Union[Value, Tensor]
 
-class Module(ABC):
+class Module:
+    """Base class for all neural network modules (Scalar or Tensor based)."""
+
     def zero_grad(self) -> None:
-        """Zeros the gradient  before it can be accumulated"""
-        for param in self.parameters():
-            param.grad = 0
+        """Resets gradients for all registered parameters."""
+        for p in self.parameters():
+            if isinstance(p, Tensor):
+                p.grad = np.zeros_like(p.data)
+            else:
+                p.grad = 0.0  # For classic scalar Value objects
 
-    def parameters(self) -> list:
-        """Gets the network parameters"""
+    def parameters(self) -> List[Parameter]:
+        """Override this in subclasses to return parameters."""
         return []
