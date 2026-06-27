@@ -31,6 +31,7 @@ class Tensor:
         self._prev = set(_children)
         self._op = _op
         self.label = label
+        self._shape = self.data.shape
 
     def backward(self):
         topo = topo_sort_iterative(self)
@@ -44,8 +45,8 @@ class Tensor:
         out = Tensor(self.data + other.data, (self, other), '+')
 
         def _backward():
-            self.grad += _unbroadcast(out.grad, self.data.shape)
-            other.grad += _unbroadcast(out.grad, other.data.shape)
+            self.grad += _unbroadcast(out.grad, self.shape)
+            other.grad += _unbroadcast(out.grad, other.shape)
 
         out._backward = _backward
         return out
@@ -55,8 +56,8 @@ class Tensor:
         out = Tensor(self.data * other.data, (self, other), '*')
 
         def _backward():
-            self.grad += _unbroadcast(out.grad * other.data, self.data.shape)
-            other.grad += _unbroadcast(out.grad * self.data, other.data.shape)
+            self.grad += _unbroadcast(out.grad * other.data, self.shape)
+            other.grad += _unbroadcast(out.grad * self.data, other.shape)
 
         out._backward = _backward
         return out
@@ -79,7 +80,7 @@ class Tensor:
         out = Tensor(self.data.reshape(shape), (self,), 'reshape')
 
         def _backward():
-            self.grad += out.grad.reshape(self.data.shape)
+            self.grad += out.grad.reshape(self.shape)
 
         out._backward = _backward
         return out
@@ -126,7 +127,12 @@ class Tensor:
     def __rmatmul__(self, other): return Tensor(other).matmul(self)
 
     @property
-    def T(self): return self.transpose()
+    def T(self):
+        return self.transpose()
+
+    @property
+    def shape(self) -> tuple:
+        return self._shape
 
     def __repr__(self):
         return f"Tensor(data={self.data.tolist()}, shape={self.data.shape}, grad={self.grad.tolist() if self.grad is not None else None})"
