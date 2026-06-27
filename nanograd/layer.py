@@ -1,17 +1,18 @@
+from typing import Sequence
+
+from nanograd.core.value import Value
 from nanograd.module import Module
 from nanograd.neuron import Neuron
-from nanograd.value import Value
 
 
 class Layer(Module):
-    """A layer class."""
+    """A layer of neurons that maps one vector to another."""
 
     def __init__(self, inputs: int, outputs: int) -> None:
-        self.neurons = [Neuron(inputs) for _ in range(outputs)]
+        self.neurons: list[Neuron] = [Neuron(inputs) for _ in range(outputs)]
 
-    def __call__(self, x: list[float]):
-        outs = [n(x) for n in self.neurons]
-        return outs
+    def __call__(self, x: Sequence[float | Value]) -> list[Value]:
+        return [neuron(x) for neuron in self.neurons]
 
     def parameters(self) -> list[Value]:
-        return [p for neuron in self.neurons for p in neuron.parameters()]
+        return [param for neuron in self.neurons for param in neuron.parameters()]

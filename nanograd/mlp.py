@@ -1,19 +1,24 @@
-from nanograd.module import Module
+from typing import Sequence
+
+from nanograd.core.value import Value
 from nanograd.layer import Layer
-from nanograd.value import Value
+from nanograd.module import Module
 
 
 class MLP(Module):
-    """A multi-layer perceptron class."""
+    """A multi-layer perceptron built from stacked layers."""
 
-    def __init__(self, inputs: int, outputs: list[float]) -> None:
-        sz = [inputs] + outputs
-        self.layers = [Layer(sz[i], sz[i+1]) for i in range(len(outputs))]
+    def __init__(self, inputs: int, outputs: list[int]) -> None:
+        if not outputs:
+            raise ValueError("MLP requires at least one output dimension")
 
-    def __call__(self, x: list[float]):
+        sizes = [inputs, *outputs]
+        self.layers: list[Layer] = [Layer(sizes[i], sizes[i + 1]) for i in range(len(outputs))]
+
+    def __call__(self, x: Sequence[float | Value]) -> list[Value]:
         for layer in self.layers:
             x = layer(x)
         return x
 
     def parameters(self) -> list[Value]:
-        return [p for layer in self.layers for p in layer.parameters()]
+        return [param for layer in self.layers for param in layer.parameters()]

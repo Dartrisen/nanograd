@@ -1,9 +1,7 @@
-from typing import List, Union
 import numpy as np
-from nanograd.value import Value
-from nanograd.tensor import Tensor
+from nanograd.core.value import Value
+from nanograd.core.tensor import Tensor
 
-Parameter = Union[Value, Tensor]
 
 class Module:
     """Base class for all neural network modules (Scalar or Tensor based)."""
@@ -16,6 +14,6 @@ class Module:
             else:
                 p.grad = 0.0  # For classic scalar Value objects
 
-    def parameters(self) -> List[Parameter]:
+    def parameters(self) -> list[Value | Tensor]:
         """Override this in subclasses to return parameters."""
         return []
