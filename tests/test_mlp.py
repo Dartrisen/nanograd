@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from nanograd.mlp import MLP
 from nanograd.layer import Layer
-from nanograd.value import Value
+from nanograd.core.value import Value
 
 
 class TestMLP(unittest.TestCase):

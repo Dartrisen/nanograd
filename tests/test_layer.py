@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from nanograd.layer import Layer
 from nanograd.neuron import Neuron
-from nanograd.value import Value
+from nanograd.core.value import Value
 
 
 class TestLayer(unittest.TestCase):
