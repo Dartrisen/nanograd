@@ -1,4 +1,7 @@
-from graphviz import Digraph
+try:
+    from graphviz import Digraph
+except ImportError:  # pragma: no cover - optional dependency
+    Digraph = None
 
 
 def trace(root):
@@ -10,11 +13,15 @@ def trace(root):
             for child in v._prev:
                 edges.add((child, v))
                 build(child)
+
     build(root)
     return nodes, edges
 
 
 def draw_dot(root, format="svg", rankdir="LR"):
+    if Digraph is None:
+        raise ImportError("graphviz is required to render computation graphs")
+
     assert rankdir in ['LR', 'TB']
     nodes, edges = trace(root)
     dot = Digraph(format=format, graph_attr={"rankdir": rankdir})
