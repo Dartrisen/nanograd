@@ -5,7 +5,6 @@ Top-level Orchestrator uniting State, Memory, Routing, and Reasoning modules.
 from __future__ import annotations
 import pickle
 import numpy as np
-from typing import List
 from nanograd import Tensor
 from nanograd import Module
 from ttnn.state import MachineState
@@ -24,7 +23,7 @@ class TensorNetworkStateMachine(Module):
         self.state = MachineState(initial_bond_dim)
         self.evolver = TopologyEvolver()
 
-    def forward(self, token_sequence: List[int]) -> List[Tensor]:
+    def forward(self, token_sequence: list[int]) -> list[Tensor]:
         """
         Processes a sequence of inputs token-by-token.
         Updates internal bond states and generates next-token predictions.
@@ -58,14 +57,24 @@ class TensorNetworkStateMachine(Module):
     def evolve_topology(self) -> bool:
         """
         Invokes the reasoning engine to rewrite operational shape states.
-        Synchronizes internal trackers if dimensions shift.
+        Synchronizes internal trackers and slices auxiliary weights if dimensions shift.
         """
         mutated = self.evolver.evolve_memory(self.memory)
         if mutated:
-            self.state.bond_dim = self.memory.bond_dim
+            new_dim = self.memory.bond_dim
+            self.state.bond_dim = new_dim
+            
+            print(f"[System] Syncing auxiliary matrices to new bond dimension: {new_dim}")
+            # Slice embedding matrix: Keep rows, truncate columns to new_dim
+            self.memory.W_embed = Tensor(self.memory.W_embed.data[:, :new_dim], label="W_embed")
+            # Slice projection matrix: Truncate both rows and columns to new_dim
+            self.memory.W_proj = Tensor(self.memory.W_proj.data[:new_dim, :new_dim], label="W_proj")
+            # Slice prediction head matrix: Truncate rows, keep vocabulary columns
+            self.memory.W_head = Tensor(self.memory.W_head.data[:new_dim, :], label="W_head")
+            
         return mutated
 
-    def parameters(self) -> List[Tensor]:
+    def parameters(self) -> list[Tensor]:
         return self.memory.parameters()
 
     def get_state_dict(self) -> dict:
@@ -111,7 +120,7 @@ def generate_text(
     """
     Generates text autoregressively by shifting the internal memory state wheel forward.
     """
-    model.state.reset()
+    # model.state.reset()
     generated = seed_text
 
     # 1. Warm up the state machine memory with the seed text prompt
