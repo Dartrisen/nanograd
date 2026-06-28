@@ -4,9 +4,7 @@ Decoupled parametric memory clusters for the Tensor Network State Machine.
 
 from __future__ import annotations
 import numpy as np
-from typing import List
-from nanograd import Tensor
-from nanograd import Module
+from nanograd import Tensor, Module
 
 
 class TNMemory(Module):
@@ -37,6 +35,6 @@ class TNMemory(Module):
         raw_head = np.random.randn(bond_dim, vocab_size) * 0.05
         self.W_head = Tensor(raw_head, label="W_head")
 
-    def parameters(self) -> List[Tensor]:
+    def parameters(self) -> list[Tensor]:
         """Returns the active parameter allocations."""
         return [self.W_embed, self.W_core, self.W_proj, self.W_head]

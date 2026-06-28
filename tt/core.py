@@ -5,7 +5,6 @@ Manages individual TT-cores, encapsulating metadata and tracking orthogonality.
 
 from __future__ import annotations
 import numpy as np
-from typing import Tuple
 
 
 class TTCore:
@@ -47,7 +46,7 @@ class TTCore:
         return self._data
 
     @property
-    def shape(self) -> Tuple[int, int, int]:
+    def shape(self) -> tuple[int, int, int]:
         """Returns the 3D shape tuple of the core: (rank_left, mode_size, rank_right)."""
         return self._shape
 

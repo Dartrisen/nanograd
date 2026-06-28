@@ -5,7 +5,6 @@ Manages validation routines, structural properties, and full tensor reconstructi
 
 from __future__ import annotations
 import numpy as np
-from typing import List, Tuple
 from tt.core import TTCore
 
 
@@ -14,7 +13,7 @@ class TensorTrain:
     A structural sequence container enclosing an ordered chain of TTCore matrices.
     """
 
-    def __init__(self, cores: List[TTCore]) -> None:
+    def __init__(self, cores: list[TTCore]) -> None:
         """
         Instantiates a TensorTrain instance.
 
@@ -56,7 +55,7 @@ class TensorTrain:
                 )
 
     @property
-    def cores(self) -> List[TTCore]:
+    def cores(self) -> list[TTCore]:
         """Returns a copy of the list of underlying cores to maintain structural safety."""
         return list(self._cores)
 
@@ -66,12 +65,12 @@ class TensorTrain:
         return len(self._cores)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         """Computes the original uncompressed multi-index dense target shape."""
         return tuple(core.mode_size for core in self._cores)
 
     @property
-    def ranks(self) -> Tuple[int, ...]:
+    def ranks(self) -> tuple[int, ...]:
         """Returns the complete structural rank footprint sequence."""
         bonds = [self._cores[0].rank_left]
         for core in self._cores:
