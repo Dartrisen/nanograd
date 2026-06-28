@@ -31,23 +31,28 @@ class TensorNetworkStateMachine(Module):
         """
         self.state.reset()
         logits_history = []
-        
+
         for token_idx in token_sequence:
-            # 1. Route token index into a square transformation operator
+            # 1. Embed the token and route it into a transition operator.
+            token_one_hot = np.zeros((1, self.vocab_size), dtype=np.float32)
+            token_one_hot[0, token_idx] = 1.0
+            token_embed = Tensor(token_one_hot, label=f"token_embed_{token_idx}").matmul(self.memory.W_embed)
+
             transition_matrix = ContractionRouter.route_token(
                 token_idx, self.vocab_size, self.memory.W_core, self.memory.bond_dim
             )
-            
-            # 2. Update state history via local matrix contraction
-            # (1, bond_dim) @ (bond_dim, bond_dim) -> (1, bond_dim)
-            new_h = self.state.h.matmul(transition_matrix)
-            self.state.update(new_h)
-            
-            # 3. Map the active hidden state to vocabulary prediction logits
-            # (1, bond_dim) @ (bond_dim, vocab_size) -> (1, vocab_size)
-            logits = self.state.h.matmul(self.memory.W_head)
+
+            # 2. Update the hidden state with a residual-style transition and a nonlinear activation.
+            state_transition = self.state.h.matmul(transition_matrix)
+            combined_state = state_transition + token_embed + 0.5 * self.state.h
+            activated_state = combined_state.tanh()
+            self.state.update(activated_state)
+
+            # 3. Project the hidden state and map it to vocabulary prediction logits.
+            projected_state = self.state.h.matmul(self.memory.W_proj)
+            logits = projected_state.matmul(self.memory.W_head)
             logits_history.append(logits)
-            
+
         return logits_history
 
     def evolve_topology(self) -> bool:
@@ -68,7 +73,9 @@ class TensorNetworkStateMachine(Module):
         return {
             "vocab_size": self.vocab_size,
             "bond_dim": self.memory.bond_dim,
+            "W_embed_data": self.memory.W_embed.data.copy(),
             "W_core_data": self.memory.W_core.data.copy(),
+            "W_proj_data": self.memory.W_proj.data.copy(),
             "W_head_data": self.memory.W_head.data.copy(),
         }
 
@@ -77,9 +84,15 @@ class TensorNetworkStateMachine(Module):
         self.vocab_size = state_dict["vocab_size"]
         self.memory.bond_dim = state_dict["bond_dim"]
         self.state.bond_dim = state_dict["bond_dim"]
-        
-        # Instantiate fresh, unlinked Tensors to clear old autograd pointers
+
+        # Instantiate fresh, unlinked Tensors to clear old autograd pointers.
+        embed_shape = (self.vocab_size, self.memory.bond_dim)
+        embed_data = state_dict.get("W_embed_data")
+        if embed_data is None or embed_data.shape != embed_shape:
+            embed_data = np.random.randn(*embed_shape) * 0.05
+        self.memory.W_embed = Tensor(embed_data, label="W_embed")
         self.memory.W_core = Tensor(state_dict["W_core_data"], label="W_core")
+        self.memory.W_proj = Tensor(state_dict.get("W_proj_data", np.random.randn(self.memory.bond_dim, self.memory.bond_dim) * 0.05), label="W_proj")
         self.memory.W_head = Tensor(state_dict["W_head_data"], label="W_head")
 
 
@@ -88,11 +101,11 @@ class TensorNetworkStateMachine(Module):
 # =====================================================================
 
 def generate_text(
-    model: TensorNetworkStateMachine, 
-    seed_text: str, 
-    length: int, 
-    char_to_idx: dict, 
-    idx_to_char: dict, 
+    model: TensorNetworkStateMachine,
+    seed_text: str,
+    length: int,
+    char_to_idx: dict,
+    idx_to_char: dict,
     temperature: float = 0.8
 ) -> str:
     """
@@ -100,37 +113,46 @@ def generate_text(
     """
     model.state.reset()
     generated = seed_text
-    
+
     # 1. Warm up the state machine memory with the seed text prompt
     for char in seed_text:
         if char in char_to_idx:
             idx = char_to_idx[char]
+            token_one_hot = np.zeros((1, model.vocab_size), dtype=np.float32)
+            token_one_hot[0, idx] = 1.0
+            token_embed = Tensor(token_one_hot, label=f"seed_embed_{idx}").matmul(model.memory.W_embed)
             transition = ContractionRouter.route_token(
                 idx, model.vocab_size, model.memory.W_core, model.memory.bond_dim
             )
-            model.state.update(model.state.h.matmul(transition))
-            
+            combined_state = model.state.h.matmul(transition) + token_embed + 0.5 * model.state.h
+            model.state.update(combined_state.tanh())
+
     # 2. Infinite horizon rolling generation loop
     for _ in range(length):
         # Decode current hidden state to vocabulary space
-        logits = model.state.h.matmul(model.memory.W_head).data.flatten()
-        
+        projected_state = model.state.h.matmul(model.memory.W_proj)
+        logits = projected_state.matmul(model.memory.W_head).data.flatten()
+
         # Apply temperature scaling to control creativity
         logits = logits / max(temperature, 1e-5)
         exp_logits = np.exp(logits - np.max(logits))
         probs = exp_logits / np.sum(exp_logits)
-        
+
         # Sample next token from the structural distribution
         next_idx = np.random.choice(len(probs), p=probs)
         next_char = idx_to_char[next_idx]
         generated += next_char
-        
-        # Cycle the generated token back into the memory matrix to advance the state
+
+        # Cycle the generated token back into the memory matrix to advance the state.
+        token_one_hot = np.zeros((1, model.vocab_size), dtype=np.float32)
+        token_one_hot[0, next_idx] = 1.0
+        token_embed = Tensor(token_one_hot, label=f"gen_embed_{next_idx}").matmul(model.memory.W_embed)
         transition = ContractionRouter.route_token(
             next_idx, model.vocab_size, model.memory.W_core, model.memory.bond_dim
         )
-        model.state.update(model.state.h.matmul(transition))
-        
+        combined_state = model.state.h.matmul(transition) + token_embed + 0.5 * model.state.h
+        model.state.update(combined_state.tanh())
+
     return generated
 
 def save_model(model: TensorNetworkStateMachine, filepath: str) -> None:
@@ -145,9 +167,9 @@ def load_model(filepath: str) -> TensorNetworkStateMachine:
     """Instantiates a state machine using saved parameter layouts."""
     with open(filepath, 'rb') as f:
         state_dict = pickle.load(f)
-        
+
     model = TensorNetworkStateMachine(
-        vocab_size=state_dict["vocab_size"], 
+        vocab_size=state_dict["vocab_size"],
         initial_bond_dim=state_dict["bond_dim"]
     )
     model.load_state_dict(state_dict)
