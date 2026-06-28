@@ -5,26 +5,10 @@ GPT-style training, checkpointing, and $O(1)$ inference execution track.
 import os
 import urllib.request
 import numpy as np
-from nanograd.core.tensor import Tensor
-from ttnn.model import TensorNetworkStateMachine
-from ttnn.model import save_model, load_model, generate_text
+from nanograd import Tensor, cross_entropy_loss
+from nanograd.optimiser import Adam
+from ttnn import TensorNetworkStateMachine, save_model, load_model, generate_text
 
-# Custom cross-entropy to handle autograd trace safely inside NanoGrad
-def cross_entropy_loss(logits_tensor: Tensor, target_idx: int) -> Tensor:
-    raw_logits = logits_tensor.data.flatten()
-    stabilized_logits = raw_logits - np.max(raw_logits)
-    exps = np.exp(stabilized_logits)
-    probabilities = exps / np.sum(exps)
-
-    loss_scalar = -np.log(probabilities[target_idx] + 1e-15)
-    out = Tensor(np.array([[loss_scalar]]), _children=(logits_tensor,), _op='cross_entropy')
-
-    def _backward():
-        derivative = probabilities.copy()
-        derivative[target_idx] -= 1.0
-        logits_tensor.grad += out.grad * derivative.reshape(logits_tensor.shape)
-    out._backward = _backward
-    return out
 
 def main():
     np.random.seed(1337)
@@ -57,28 +41,31 @@ def main():
     else:
         print(f"\n[System] Initializing new Tensor Network State Machine...")
         # Start with a conservative rank footprint
-        model = TensorNetworkStateMachine(vocab_size=vocab_size, initial_bond_dim=12)
+        model = TensorNetworkStateMachine(vocab_size=vocab_size, initial_bond_dim=64)
+    # Force the model to allow a larger rank ceiling for potential topology evolution
+    model.evolver.max_rank = 32
 
     # --- PHASE 3: CAUSAL NEXT-TOKEN TRAINING LOOP ---
-    epochs = 60
+    epochs = 30
     seq_len = 12
     learning_rate = 0.02
 
     print(f"\nTraining configuration: {epochs} Epochs | Sequence Window: {seq_len} | Vocabulary: {vocab_size}")
     print(f"Starting weights grid dimensions: {model.memory.W_core.data.shape}")
 
+    optimizer = Adam(model.parameters(), lr=learning_rate)
+
     for epoch in range(epochs):
         total_loss = 0.0
         steps = 0
 
         # Step through data using a mix of overlapping windows and random start points
-        window_starts = list(range(0, len(tokenized) - seq_len - 1, 15))
+        window_starts = list(range(0, len(tokenized) - seq_len - 1, seq_len))
+        np.random.shuffle(window_starts)
         if not window_starts:
             window_starts = [0]
 
         for offset in window_starts:
-            if len(window_starts) > 1:
-                offset = window_starts[np.random.randint(0, len(window_starts))]
             inputs = tokenized[offset : offset + seq_len]
             targets = tokenized[offset + 1 : offset + seq_len + 1]
 
@@ -98,15 +85,9 @@ def main():
             loss_node.backward()
 
             max_norm = 5.0
-            for p in model.parameters():
-                if p.grad is not None:
-                    # Clip extreme individual elements to safe operational bounds
-                    p.grad = np.clip(p.grad, -max_norm, max_norm)
-
-            # Parameter optimization update with a mild learning-rate decay.
             current_lr = learning_rate / (1.0 + 0.005 * epoch)
-            for p in model.parameters():
-                p.data -= current_lr * p.grad
+            optimizer.lr = current_lr
+            optimizer.step(max_norm=max_norm)
 
         # --- PHASE 4: MID-FLIGHT TOPOLOGY EVOLUTION ---
         avg_loss = total_loss / steps
@@ -116,6 +97,7 @@ def main():
         structure_changed = model.evolve_topology()
         if structure_changed:
             print(f"  -> Adapted configuration tracking shape: {model.memory.W_core.data.shape}")
+            optimizer.parameters = model.parameters()
 
     # Save final model state
     save_model(model, checkpoint_file)
