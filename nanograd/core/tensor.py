@@ -117,6 +117,16 @@ class Tensor:
         out._backward = _backward
         return out
 
+    def sigmoid(self):
+        s = 1 / (1 + np.exp(-self.data))
+        out = Tensor(s, (self,), 'sigmoid')
+
+        def _backward():
+            self.grad += s * (1 - s) * out.grad
+
+        out._backward = _backward
+        return out
+
     def __add__(self, other): return self.add(other)
     def __radd__(self, other): return self.add(other)
 
