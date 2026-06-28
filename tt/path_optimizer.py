@@ -4,7 +4,6 @@ Analyzes shape metadata to prevent memory bottlenecks during sequence processing
 """
 
 from __future__ import annotations
-from typing import Tuple
 
 
 class ContractionPathOptimizer:
