@@ -25,16 +25,16 @@ class TopologyEvolver:
         vocab_size = memory.vocab_size
         curr_bond = memory.bond_dim
         
-        # 1. Unfold active weights into a matrix mapping across mode profiles
+        # Unfold active weights into a matrix mapping across mode profiles
         matrix_view = memory.W_core.data.reshape(vocab_size * curr_bond, curr_bond)
         
-        # 2. Execute economy Singular Value Decomposition
+        # Execute economy Singular Value Decomposition
         try:
             U, S, Vt = np.linalg.svd(matrix_view, full_matrices=False)
         except np.linalg.LinAlgError:
             return False
         
-        # 3. Measure relative energy allocations to determine the required rank
+        # Measure relative energy allocations to determine the required rank
         total_energy = np.sum(S ** 2)
         if total_energy < 1e-10:
             return False
@@ -43,7 +43,7 @@ class TopologyEvolver:
         ideal_rank = np.argmax(cumulative_energy >= (1.0 - self.eps ** 2)) + 1
         ideal_rank = max(self.min_rank, min(ideal_rank, self.max_rank))
         
-        # 4. If a structural change is required, alter the model's internal parameters
+        # If a structural change is required, alter the model's internal parameters
         if ideal_rank != curr_bond:
             
             # --- ASCII VISUALIZATION OF NETWORK BRANCHES ---
@@ -62,7 +62,7 @@ class TopologyEvolver:
             print("≈" * 55 + "\n")
             # -----------------------------------------------
 
-            # MATHEMATICAL FIX: Safely project the 3D tensor to the new dimensions
+            # Safely project the 3D tensor to the new dimensions
             # Extract current 3D state
             old_core_3d = memory.W_core.data.reshape(vocab_size, curr_bond, curr_bond)
             
