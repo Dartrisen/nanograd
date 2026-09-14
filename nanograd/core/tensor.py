@@ -51,6 +51,26 @@ class Tensor:
         out._backward = _backward
         return out
 
+    def sub(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        out = Tensor(self.data - other.data, (self, other), '-')
+
+        def _backward():
+            self.grad += _unbroadcast(out.grad, self.shape)
+            other.grad += _unbroadcast(-out.grad, other.shape)
+
+        out._backward = _backward
+        return out
+
+    def neg(self):
+        out = Tensor(-self.data, (self,), 'neg')
+
+        def _backward():
+            self.grad += -out.grad
+
+        out._backward = _backward
+        return out
+
     def mul(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
         out = Tensor(self.data * other.data, (self, other), '*')
@@ -58,6 +78,17 @@ class Tensor:
         def _backward():
             self.grad += _unbroadcast(out.grad * other.data, self.shape)
             other.grad += _unbroadcast(out.grad * self.data, other.shape)
+
+        out._backward = _backward
+        return out
+
+    def div(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        out = Tensor(self.data / other.data, (self, other), '/')
+
+        def _backward():
+            self.grad += _unbroadcast(out.grad / other.data, self.shape)
+            other.grad += _unbroadcast(-out.grad * self.data / (other.data ** 2), other.shape)
 
         out._backward = _backward
         return out
@@ -127,11 +158,19 @@ class Tensor:
         out._backward = _backward
         return out
 
+    # --- Operator Overloads ---
     def __add__(self, other): return self.add(other)
     def __radd__(self, other): return self.add(other)
 
+    def __sub__(self, other): return self.sub(other)
+    def __rsub__(self, other): return Tensor(other).sub(self)
+    def __neg__(self): return self.neg()
+
     def __mul__(self, other): return self.mul(other)
     def __rmul__(self, other): return self.mul(other)
+
+    def __truediv__(self, other): return self.div(other)
+    def __rtruediv__(self, other): return Tensor(other).div(self)
 
     def __matmul__(self, other): return self.matmul(other)
     def __rmatmul__(self, other): return Tensor(other).matmul(self)
@@ -146,4 +185,3 @@ class Tensor:
 
     def __repr__(self):
         return f"Tensor(data={self.data.tolist()}, shape={self.data.shape}, grad={self.grad.tolist() if self.grad is not None else None})"
-
