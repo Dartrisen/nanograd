@@ -63,7 +63,7 @@ class TensorNetworkStateMachine(Module):
         if mutated:
             new_dim = self.memory.bond_dim
             self.state.bond_dim = new_dim
-            
+
             print(f"[System] Syncing auxiliary matrices to new bond dimension: {new_dim}")
             # Slice embedding matrix: Keep rows, truncate columns to new_dim
             self.memory.W_embed = Tensor(self.memory.W_embed.data[:, :new_dim], label="W_embed")
@@ -71,7 +71,7 @@ class TensorNetworkStateMachine(Module):
             self.memory.W_proj = Tensor(self.memory.W_proj.data[:new_dim, :new_dim], label="W_proj")
             # Slice prediction head matrix: Truncate rows, keep vocabulary columns
             self.memory.W_head = Tensor(self.memory.W_head.data[:new_dim, :], label="W_head")
-            
+
         return mutated
 
     def parameters(self) -> list[Tensor]:
@@ -120,10 +120,10 @@ def generate_text(
     """
     Generates text autoregressively by shifting the internal memory state wheel forward.
     """
-    # model.state.reset()
+    model.state.reset()
     generated = seed_text
 
-    # 1. Warm up the state machine memory with the seed text prompt
+    # Warm up the state machine memory with the seed text prompt
     for char in seed_text:
         if char in char_to_idx:
             idx = char_to_idx[char]
@@ -136,7 +136,7 @@ def generate_text(
             combined_state = model.state.h.matmul(transition) + token_embed + 0.5 * model.state.h
             model.state.update(combined_state.tanh())
 
-    # 2. Infinite horizon rolling generation loop
+    # Infinite horizon rolling generation loop
     for _ in range(length):
         # Decode current hidden state to vocabulary space
         projected_state = model.state.h.matmul(model.memory.W_proj)

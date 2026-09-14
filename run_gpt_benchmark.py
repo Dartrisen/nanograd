@@ -36,18 +36,18 @@ def main():
     # --- PHASE 2: INITIALIZATION OR RESUMPTION ---
     resume_training = True
     if resume_training and os.path.exists(checkpoint_file):
-        print(f"\n[System] Found existing checkpoint. Loading model...")
+        print("\n[System] Found existing checkpoint. Loading model...")
         model = load_model(checkpoint_file)
     else:
-        print(f"\n[System] Initializing new Tensor Network State Machine...")
+        print("\n[System] Initializing new Tensor Network State Machine...")
         # Start with a conservative rank footprint
-        model = TensorNetworkStateMachine(vocab_size=vocab_size, initial_bond_dim=64)
+        model = TensorNetworkStateMachine(vocab_size=vocab_size, initial_bond_dim=32)
     # Force the model to allow a larger rank ceiling for potential topology evolution
     model.evolver.max_rank = 32
 
     # --- PHASE 3: CAUSAL NEXT-TOKEN TRAINING LOOP ---
     epochs = 30
-    seq_len = 12
+    seq_len = 32
     learning_rate = 0.02
 
     print(f"\nTraining configuration: {epochs} Epochs | Sequence Window: {seq_len} | Vocabulary: {vocab_size}")
