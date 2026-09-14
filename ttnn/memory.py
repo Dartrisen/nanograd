@@ -1,40 +1,34 @@
-"""
-Decoupled parametric memory clusters for the Tensor Network State Machine.
-"""
-
 from __future__ import annotations
 import numpy as np
 from nanograd import Tensor, Module
+from tt.linear import TTLinear
 
 
 class TNMemory(Module):
     """
-    Houses the low-rank core blocks and prediction projections.
+    Parametric memory cluster constructed with TT-Linear layers and multi-core transition tensors.
     """
-    def __init__(self, vocab_size: int, bond_dim: int) -> None:
+    def __init__(self, vocab_size: int, bond_dim: int, tt_rank: int = 4) -> None:
         self.vocab_size = vocab_size
         self.bond_dim = bond_dim
+        self.tt_rank = tt_rank
 
-        # Token embeddings provide richer per-step input features.
-        # Shape layout: (vocab_size, bond_dim)
-        raw_embed = np.random.randn(vocab_size, bond_dim) * 0.1
-        self.W_embed = Tensor(raw_embed, label="W_embed")
+        # TT-Linear Embedding layer
+        self.W_embed = TTLinear(in_modes=(vocab_size,), out_modes=(bond_dim,), tt_rank=tt_rank)
 
-        # Structural Core: Maps tokens to spatial matrix operations.
-        # Shape layout: (vocab_size, bond_dim * bond_dim)
-        raw_core = np.random.randn(vocab_size, bond_dim * bond_dim) * 0.05
-        self.W_core = Tensor(raw_core, label="W_core")
+        # Decomposed 2-core Tensor Train state transition operator chain
+        # G1 maps token index to latent rank vector: (vocab_size, tt_rank)
+        # G2 expands latent rank vector into matrix state operator: (tt_rank, bond_dim, bond_dim)
+        raw_g1 = np.random.randn(vocab_size, tt_rank).astype(np.float32) * 0.05
+        raw_g2 = np.random.randn(tt_rank, bond_dim, bond_dim).astype(np.float32) * 0.05
+        self.G1_core = Tensor(raw_g1, label="G1_core")
+        self.G2_core = Tensor(raw_g2, label="G2_core")
 
-        # Small projection head to add a learnable nonlinearity before the output.
-        # Shape layout: (bond_dim, bond_dim)
-        raw_proj = np.random.randn(bond_dim, bond_dim) * 0.05
-        self.W_proj = Tensor(raw_proj, label="W_proj")
-
-        # Predictive Projection Head: Decodes active state back to vocabulary spaces.
-        # Shape layout: (bond_dim, vocab_size)
-        raw_head = np.random.randn(bond_dim, vocab_size) * 0.05
-        self.W_head = Tensor(raw_head, label="W_head")
+        # TT-Linear Projection and Output Prediction layers
+        self.W_proj = TTLinear(in_modes=(bond_dim,), out_modes=(bond_dim,), tt_rank=tt_rank)
+        self.W_head = TTLinear(in_modes=(bond_dim,), out_modes=(vocab_size,), tt_rank=tt_rank)
 
     def parameters(self) -> list[Tensor]:
-        """Returns the active parameter allocations."""
-        return [self.W_embed, self.W_core, self.W_proj, self.W_head]
+        params = self.W_embed.parameters() + [self.G1_core, self.G2_core]
+        params += self.W_proj.parameters() + self.W_head.parameters()
+        return params

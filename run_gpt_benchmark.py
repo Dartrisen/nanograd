@@ -1,5 +1,6 @@
 """
-GPT-style training, checkpointing, and $O(1)$ inference execution track.
+GPT-style training and $O(1)$ inference execution track.
+Configured for higher state capacity (bond_dim=16, tt_rank=16) and normalized per-token loss.
 """
 
 import os
@@ -13,45 +14,51 @@ from ttnn import TensorNetworkStateMachine, save_model, load_model, generate_tex
 def main():
     np.random.seed(1337)
     checkpoint_file = "tnsm_shakespeare.pkl"
+    cache_file = "tinyshakespeare.txt"
 
-    # --- PHASE 1: DATA ACQUISITION & PROCESSING ---
-    url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
-    print("[Data] Syncing with Tiny Shakespeare repository...")
-    try:
-        with urllib.request.urlopen(url) as response:
-            raw_data = response.read().decode('utf-8')
-        # Isolate a clean text slice appropriate for micro-framework tracking speeds
-        corpus = raw_data[:25000]
-        print(f"[Data] Successfully loaded {len(corpus)} characters.")
-    except Exception as e:
-        print(f"[Warning] Online fetch failed ({e}). Falling back to internal text asset.")
-        corpus = "To be, or not to be, that is the question: Whether 'tis nobler in the mind to suffer the slings and arrows of outrageous fortune." * 200
+    # --- DATA ACQUISITION & CACHING ---
+    if os.path.exists(cache_file):
+        print(f"[Data] Loading dataset from local cache: '{cache_file}'...")
+        with open(cache_file, "r", encoding="utf-8") as f:
+            raw_data = f.read()
+        print(f"[Data] Successfully loaded {len(raw_data)} characters from disk.")
+    else:
+        url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+        print("[Data] Cache not found. Fetching online dataset...")
+        try:
+            with urllib.request.urlopen(url) as response:
+                raw_data = response.read().decode('utf-8')
+            with open(cache_file, "w", encoding="utf-8") as f:
+                f.write(raw_data)
+            print(f"[Data] Saved {len(raw_data)} characters locally to '{cache_file}'.")
+        except Exception as e:
+            print(f"[Warning] Online fetch failed ({e}). Using local fallback string.")
+            raw_data = "To be, or not to be, that is the question: Whether 'tis nobler in the mind to suffer." * 200
 
+    corpus = raw_data[:25000]
     chars = sorted(list(set(corpus)))
     vocab_size = len(chars)
     char_to_idx = {ch: i for i, ch in enumerate(chars)}
     idx_to_char = {i: ch for i, ch in enumerate(chars)}
     tokenized = [char_to_idx[ch] for ch in corpus]
 
-    # --- PHASE 2: INITIALIZATION OR RESUMPTION ---
-    resume_training = True
+    # --- INITIALIZATION (Bond Dim = 16, TT Rank = 16) ---
+    resume_training = False  # Set to False to train the new high-capacity state machine from scratch
     if resume_training and os.path.exists(checkpoint_file):
-        print("\n[System] Found existing checkpoint. Loading model...")
+        print(f"\n[System] Found existing checkpoint. Loading model...")
         model = load_model(checkpoint_file)
     else:
-        print("\n[System] Initializing new Tensor Network State Machine...")
-        # Start with a conservative rank footprint
-        model = TensorNetworkStateMachine(vocab_size=vocab_size, initial_bond_dim=32)
-    # Force the model to allow a larger rank ceiling for potential topology evolution
-    model.evolver.max_rank = 32
+        print(f"\n[System] Initializing new High-Capacity Tensor Network State Machine...")
+        model = TensorNetworkStateMachine(vocab_size=vocab_size, initial_bond_dim=16, tt_rank=16)
 
-    # --- PHASE 3: CAUSAL NEXT-TOKEN TRAINING LOOP ---
+    # --- TRAINING CONFIGURATION ---
     epochs = 30
-    seq_len = 32
-    learning_rate = 0.02
+    seq_len = 12
+    learning_rate = 0.01
 
-    print(f"\nTraining configuration: {epochs} Epochs | Sequence Window: {seq_len} | Vocabulary: {vocab_size}")
-    print(f"Starting weights grid dimensions: {model.memory.W_core.data.shape}")
+    print(f"\nTraining configuration: {epochs} Epochs | Window: {seq_len} | Vocab: {vocab_size}")
+    print(f"Bond Dimension: {model.memory.bond_dim} | TT Rank: {model.memory.tt_rank}")
+    print(f"TT Cores: G1={model.memory.G1_core.data.shape}, G2={model.memory.G2_core.data.shape}")
 
     optimizer = Adam(model.parameters(), lr=learning_rate)
 
@@ -59,7 +66,6 @@ def main():
         total_loss = 0.0
         steps = 0
 
-        # Step through data using a mix of overlapping windows and random start points
         window_starts = list(range(0, len(tokenized) - seq_len - 1, seq_len))
         np.random.shuffle(window_starts)
         if not window_starts:
@@ -72,37 +78,28 @@ def main():
             model.zero_grad()
             logits_history = model.forward(inputs)
 
-            # Accumulate loss over the execution sequence steps
+            # Compute sequence loss
             loss_node = Tensor(np.array([[0.0]]))
             for t in range(seq_len):
                 step_loss = cross_entropy_loss(logits_history[t], targets[t])
                 loss_node = loss_node + step_loss
 
-            total_loss += loss_node.data[0][0]
+            # Normalize loss per token step (Cross Entropy Per Token)
+            normalized_loss = loss_node * (1.0 / seq_len)
+            total_loss += normalized_loss.data[0][0]
             steps += 1
 
-            # Compute gradients via backpropagation
-            loss_node.backward()
+            normalized_loss.backward()
 
-            max_norm = 5.0
-            current_lr = learning_rate / (1.0 + 0.005 * epoch)
-            optimizer.lr = current_lr
-            optimizer.step(max_norm=max_norm)
+            optimizer.lr = learning_rate / (1.0 + 0.005 * epoch)
+            optimizer.step(max_norm=5.0)
 
-        # --- PHASE 4: MID-FLIGHT TOPOLOGY EVOLUTION ---
-        avg_loss = total_loss / steps
-        print(f"Epoch {epoch+1:02d}/{epochs:02d} | Causal Loss: {avg_loss:.4f}")
+        avg_token_loss = total_loss / steps
+        print(f"Epoch {epoch+1:02d}/{epochs:02d} | Per-Token Loss: {avg_token_loss:.4f}")
 
-        # Every epoch, let the network evaluate its own singular value allocations
-        structure_changed = model.evolve_topology()
-        if structure_changed:
-            print(f"  -> Adapted configuration tracking shape: {model.memory.W_core.data.shape}")
-            optimizer.parameters = model.parameters()
-
-    # Save final model state
     save_model(model, checkpoint_file)
 
-    # --- PHASE 5: AUTOREGRESSIVE GENERATION INFERENCE ---
+    # --- INFERENCE RUN ---
     print("\n" + "="*52)
     print("INFERENCE RUN: GENERATING FROM TRAINED STATE MACHINE")
     print("="*52)
@@ -119,6 +116,7 @@ def main():
         )
         print(f"\nPrompt Input: '{seed}'\nGenerated Extension:\n{output_generation}")
         print("-" * 40)
+
 
 if __name__ == "__main__":
     main()
